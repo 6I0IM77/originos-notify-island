@@ -49,7 +49,7 @@
 
 已在 vivo X300 Pro、OriginOS 6、Android 16 上进行功能验证。
 
-OriginOS 5、OriginOS 7、横屏、折叠屏及其他 vivo 机型尚未逐一验证。不同应用的通知格式和回复接口可能存在差异。
+OriginOS 5、OriginOS 7已做离线适配，未做实机测试，欢迎反馈bug，反馈入口在版本发布说明中。
 
 本项目需要系统级 Hook 权限，仅建议在了解 Root、LSPosed 和系统界面模块风险的情况下使用。
 
