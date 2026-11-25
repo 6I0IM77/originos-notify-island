@@ -80,7 +80,4 @@ OriginOS 5、OriginOS 7已做离线适配，未做实机测试，欢迎反馈bug
 
 本项目需要系统级 Hook 权限，仅建议在了解 Root、LSPosed 和系统界面模块风险的情况下使用。
 
-赞助作者，提供后续版本的开发动力：
 
-<br>
-<img width="200" height="300" alt="赞助二维码" src="https://github.com/user-attachments/assets/fea8d244-80da-49e6-92ad-bfee35de509b">
