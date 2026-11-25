@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">通知上岛</string>
+    <string name="seconds_value">%1$d 秒</string>
+    <string name="millis_value">%1$d 毫秒</string>
+    <string name="selected_apps">已选择 %1$d 个应用</string>
+    <string name="app_search_results">当前列表 %1$d 项</string>
+</resources>
