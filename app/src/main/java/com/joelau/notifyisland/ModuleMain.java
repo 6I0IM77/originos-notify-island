@@ -9,6 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import io.github.libxposed.api.XposedModule;
 
 public final class ModuleMain extends XposedModule {
+    static final String TAG="NotifyIsland";
     private final Set<String> startedPackages=ConcurrentHashMap.newKeySet();
     @Override public void onPackageReady(PackageReadyParam p) {
         String packageName=p.getPackageName();
@@ -36,7 +37,9 @@ public final class ModuleMain extends XposedModule {
             }
         }catch(Throwable t){error("Unsupported system interface",t);}
     }
-    void info(String s){log(Log.INFO,"NotifyIsland",s);}
-    void error(String s,Throwable t){log(Log.ERROR,"NotifyIsland",s,t);}
+    // libxposed's log() goes to the framework's own module log, not logcat, which left us
+    // debugging blind. Write straight to logcat so a phone-side capture shows the call state.
+    void info(String s){Log.i(TAG,s);}
+    void error(String s,Throwable t){Log.e(TAG,s,t);}
 }
 

@@ -318,6 +318,8 @@ final class NativeIsland {
     private long callStarted;
     private boolean callSession;
     private boolean callTicking;
+    /** The app gave no observable pickup moment, so the right half reads 通话中 without a clock. */
+    private boolean callUntimed;
     private TextView callLabel;
     private int callGeneration;
     void showCallIsland(String pkg,long startedAt,String peer,android.graphics.Bitmap avatar)throws Exception{
@@ -325,6 +327,15 @@ final class NativeIsland {
         notifyCallIsland();
         startCallTicker();
         host.module.info("Call island shown pkg="+pkg+" name="+callName+" avatar="+(avatar!=null));
+    }
+    /**
+     * Apps that join their audio channel at dial time never expose the pickup, so a clock started
+     * from any visible signal would count the ringback. Show 通话中 for the whole call instead.
+     */
+    void showCallIslandUnclocked(String pkg,String peer,android.graphics.Bitmap avatar)throws Exception{
+        callUntimed=true;
+        showCallIsland(pkg,0L,peer,avatar);
+        host.module.info("Call island untimed pkg="+pkg);
     }
     /** The peer name/avatar arrived after the pill was already up: swap the content in place. */
     void updateCallIsland(String pkg,String peer,android.graphics.Bitmap avatar)throws Exception{
@@ -356,8 +367,11 @@ final class NativeIsland {
         call(b,"buildLeftIcon",Icon.class,appIcon(pkg));
         call(b,"buildLeftContent",CharSequence.class,"");
         call(b,"buildRightContent",CharSequence.class,callDuration());
-        call(b,"buildIslandClick",int.class,0);
-        PendingIntent open=callLaunchIntent(pkg);
+        // 1 is the native "tap fires ClickIslandResp" mode. With 0 the tap only asks the
+        // controller to re-aim the main island, so the intent was never sent and the pill did
+        // nothing at all. The call pill has no detail card, so a tap must open the call page.
+        call(b,"buildIslandClick",int.class,1);
+        PendingIntent open=callClickIntent(pkg);
         if(open!=null)call(b,"buildClickIslandResp",PendingIntent.class,open);
         call(b,"buildTemplateCard",int.class,6);
         call(b,"buildTimeout",long.class,Long.MAX_VALUE);
@@ -373,7 +387,7 @@ final class NativeIsland {
     }
     void destroyCallIsland()throws Exception{
         if(!callSession)return;
-        callSession=false;callTicking=false;callLabel=null;callPackage=null;
+        callSession=false;callTicking=false;callLabel=null;callPackage=null;callUntimed=false;
         receiverClass.getMethod("deleteAtomIsland",String.class).invoke(receiver,Wire.PREFIX+CALL_KEY);
     }
     private void startCallTicker(){
@@ -393,13 +407,16 @@ final class NativeIsland {
      * not from the dial, so the dialling phase shows 正在呼叫 instead of a growing timer.
      */
     private String callDuration(){
-        if(callStarted<=0)return "正在呼叫";
-        long seconds=Math.max(0,(SystemClock.elapsedRealtime()-callStarted)/1000L);
-        return callClock(seconds);
+        if(callUntimed)return "通话中";
+        if(callStarted>0){
+            long seconds=Math.max(0,(SystemClock.elapsedRealtime()-callStarted)/1000L);
+            return callClock(seconds);
+        }
+        return "正在呼叫";
     }
     /** The peer answered; re-render once so the width shrinks to the timer it now owns. */
     void markCallConnected()throws Exception{
-        if(!callSession||callStarted>0)return;
+        if(!callSession||callUntimed||callStarted>0)return;
         callStarted=SystemClock.elapsedRealtime()+callSettle();
         notifyCallIsland();
         host.module.info("Call island counting from answer");
@@ -408,6 +425,19 @@ final class NativeIsland {
         long hours=seconds/3600,minutes=(seconds%3600)/60,rest=seconds%60;
         if(hours>0)return hours+":"+(minutes<10?"0":"")+minutes+":"+(rest<10?"0":"")+rest;
         return (minutes<10?"0":"")+minutes+":"+(rest<10?"0":"")+rest;
+    }
+    /**
+     * Tapping a call pill must land on the app's own call page, not its home screen. The call
+     * notification carries the intent that does exactly that (it is what the shade uses), so
+     * reuse it and only fall back to opening the app itself when no call notification exists.
+     */
+    private PendingIntent callClickIntent(String pkg){
+        try{
+            EntryStore.Entry<Intent> e=host.store.latestCall(pkg);
+            PendingIntent pi=e==null?null:e.payload.getParcelableExtra("click");
+            if(pi!=null)return pi;
+        }catch(Throwable ignored){}
+        return callLaunchIntent(pkg);
     }
     private PendingIntent callLaunchIntent(String pkg){
         try{
@@ -432,7 +462,7 @@ final class NativeIsland {
         String name=callName==null?"通话":callName;
         android.graphics.Bitmap avatar=callAvatar;
         String duration=callDuration();
-        String measured=duration.equals("正在呼叫")?duration:"00:00";
+        String measured=callUntimed||duration.equals("正在呼叫")?duration:"00:00";
         LinearLayout row=MessageViews.half(ctx,
                 ()->MessageViews.adaptiveHalfWidth(ctx,screen,cutout,height,name,measured,MessageDisplay.CONTENT,null,false,left),
                 ()->height,left,pkg,name,duration,avatar,MessageDisplay.CONTENT,null);
@@ -440,10 +470,11 @@ final class NativeIsland {
             View last=row.getChildAt(row.getChildCount()-1);
             if(last instanceof TextView){callLabel=(TextView)last;callLabel.setText(callDuration());}
         }
-        final PendingIntent open=callLaunchIntent(pkg);
+        // The row swallows the tap before the native capsule's own click handler can fire,
+        // so this listener is the only place that can decide where a tap lands.
         row.setOnClickListener(v->{
             v.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
-            if(open!=null)try{open.send();}catch(PendingIntent.CanceledException ignored){}
+            host.openCall(pkg);
         });
         row.setOnLongClickListener(v->false);
         return row;

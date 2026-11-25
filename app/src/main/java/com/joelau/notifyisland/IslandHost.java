@@ -49,19 +49,35 @@ final class IslandHost {
     private void receive(Intent i)throws Exception{
         if(failed)return;
         String key=i.getStringExtra("key");if(key==null||key.length()>1024)return;
-        if("remove".equals(i.getStringExtra("op"))){if(store.remove(key))hide();return;}
+        if("remove".equals(i.getStringExtra("op"))){
+            EntryStore.Entry<Intent> gone=store.get(key);
+            if(store.remove(key))hide();
+            // The call notification went away: a ringing call that never reached the audio path
+            // has to disappear with it instead of lingering on the island.
+            if(gone!=null&&gone.call)calls.onCallNoticeRemoved(gone.pkg);
+            return;
+        }
         String pkg=i.getStringExtra("package");
-        if(!prefs.getBoolean("enabled",true)||!prefs.getStringSet("scope_packages",Wire.DEFAULTS).contains(pkg))return;
+        if(!prefs.getBoolean("enabled",true))return;
+        boolean call=i.getIntExtra("call",0)!=0;
+        // A call notification may come from a package outside the message scope: it only feeds the
+        // call island, which has its own switch.
+        if(!call&&!prefs.getStringSet("scope_packages",Wire.DEFAULTS).contains(pkg))return;
         EntryStore.Entry<Intent> old=store.get(key);
-        EntryStore.Entry<Intent> e=store.post(key,pkg,i.getStringExtra("conversation"),i.getStringExtra("fingerprint"),i.getIntExtra("number",1),i,SystemClock.elapsedRealtime());
+        EntryStore.Entry<Intent> e=store.post(key,pkg,i.getStringExtra("conversation"),i.getStringExtra("fingerprint"),
+                i.getIntExtra("number",1),i,SystemClock.elapsedRealtime(),call);
         if(e==null&&old!=null&&!Arrays.equals(old.payload.getByteArrayExtra(SenderAvatar.EXTRA),i.getByteArrayExtra(SenderAvatar.EXTRA))){
             EntryStore.Entry<Intent> refreshed=store.refresh(key,i);
-            if(store.active()==refreshed)e=refreshed;
+            if(!call&&store.active()==refreshed)e=refreshed;
         }
-        // A VoIP call notification is captured only so the call island can read its peer name
-        // and portrait; it must not appear as a second message pill.
+        // A VoIP call notification is captured only so the call island can read its peer name,
+        // portrait and phase; it must not appear as a second message pill or a badge.
+        if(call){
+            calls.onCallNotice(pkg,i.getStringExtra("title"),i.getStringExtra("body"),
+                    i.getStringExtra("alt"),i.getByteArrayExtra(SenderAvatar.EXTRA));
+            return;
+        }
         if(e==null)return;
-        if(i.getIntExtra("call",0)!=0){calls.onCallEntry(pkg);return;}
         show(e);
     }
     private void show(EntryStore.Entry<Intent> e)throws Exception{
@@ -106,6 +122,54 @@ final class IslandHost {
         if(nativeIsland!=null){nativeIsland.resetCardMotion();}
         if(visibleKey!=null){try{nativeIsland.remove(visibleKey);}catch(Throwable t){module.error("Remove island",t);}visibleKey=null;}
     }
+    /**
+     * A tap on the call pill should land on the app's live call page, including when the call
+     * runs in a floating window. The call notification's own intent is the most faithful route;
+     * when the app has withdrawn it, raising the task that holds the call is the next best thing.
+     */
+    void openCall(String pkg){
+        PendingIntent pi=null;
+        try{
+            EntryStore.Entry<Intent> e=store.latestCall(pkg);
+            if(e!=null)pi=e.payload.getParcelableExtra("click");
+        }catch(Throwable t){module.error("Read call intent",t);}
+        module.info("Call tap pkg="+pkg+" noticeIntent="+(pi!=null));
+        if(pi!=null)try{
+            nativeIsland.launch(pi,false);
+            module.info("Call tap through the call notification");
+            return;
+        }catch(Throwable t){module.error("Call tap intent",t);}
+        if(bringCallTaskToFront(pkg))return;
+        try{
+            Intent launch=context.getPackageManager().getLaunchIntentForPackage(pkg);
+            if(launch!=null){
+                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(launch);
+                module.info("Call tap opened the app");
+            }
+        }catch(Throwable t){module.error("Call tap launch",t);}
+    }
+
+    /** REAL_GET_TASKS and REORDER_TASKS are granted to the island service, so this works. */
+    private boolean bringCallTaskToFront(String pkg){
+        try{
+            ActivityManager am=(ActivityManager)context.getSystemService(Context.ACTIVITY_SERVICE);
+            if(am==null)return false;
+            java.util.List<ActivityManager.RunningTaskInfo> tasks=am.getRunningTasks(20);
+            if(tasks==null)return false;
+            for(ActivityManager.RunningTaskInfo task:tasks){
+                android.content.ComponentName top=task.topActivity;
+                if(top==null||!pkg.equals(top.getPackageName()))continue;
+                java.lang.reflect.Method move=ActivityManager.class.getMethod("moveTaskToFront",int.class,int.class);
+                move.invoke(am,task.id,0);
+                module.info("Call tap raised task "+task.id+" top="+top.flattenToShortString());
+                return true;
+            }
+            module.info("Call tap found no task for "+pkg+" among "+tasks.size());
+        }catch(Throwable t){module.error("Raise call task",t);}
+        return false;
+    }
+
     void launch(EntryStore.Entry<Intent> e,boolean small){
         if(small){launchSmall(e);return;}
         PendingIntent pi=e.payload.getParcelableExtra("click");
