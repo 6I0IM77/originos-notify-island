@@ -106,7 +106,8 @@
 
 ## 当前适配情况
 
-已在 vivo X300 Pro、OriginOS 6、Android 16 上进行功能验证。
+已在 vivo X300 Pro、OriginOS 6、Android 16
+IQOO 13、OriginOS 7、Android 17上进行功能验证。
 
 OriginOS 5、OriginOS 7已做离线适配，未做实机测试，欢迎反馈bug，反馈入口在版本发布说明中。
 
