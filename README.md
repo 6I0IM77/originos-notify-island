@@ -6,7 +6,7 @@
 > 基于原作者 [joelau0503/originos-notify-island](https://github.com/joelau0503/originos-notify-island) 0.1.31 源码继续开发，全部改动见 [CHANGES.md](CHANGES.md)，可直接安装的构建产物在 [dist/OriginOS-Notify-Island-0.1.33.apk](dist/OriginOS-Notify-Island-0.1.33.apk)。
 > 主要新增：多岛共存与挤压、单岛宽度自适应、卡片环境色渐变、第三方通话岛（微信/QQ 等，从接听开始计时）、设置页重排与即时生效。
 
-## 本分支改动（0.1.33）
+## 本分支改动（0.1.32）
 
 横屏恢复系统原生显示条件：状态栏未下滑时，不再强制把消息胶囊或中央卡片显示在横屏应用中央；下滑状态栏后，由 SystemUI 按原生逻辑恢复显示。其余消息、卡片、手势和通话岛功能保持不变。
 
