@@ -12,7 +12,7 @@ final class IslandIcons {
     private static float roundRatio=.30f;
     private static String styleSource="fallback 6/20";
     private static boolean lastNormalized;
-    static String diagnostics(){return "0.1.32; radiusRatio="+roundRatio+"; source="+styleSource+"; normalized="+lastNormalized;}
+    static String diagnostics(){return "0.1.33; radiusRatio="+roundRatio+"; source="+styleSource+"; normalized="+lastNormalized;}
     static void useNativeStyle(Context context,ClassLoader loader)throws ReflectiveOperationException{
         Context nativeContext=new NativeDensity(loader).fix(context);
         Class<?> dimen=Class.forName("com.vivo.island.R$dimen",false,loader);

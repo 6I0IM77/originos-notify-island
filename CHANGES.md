@@ -1,3 +1,15 @@
+# 0.1.33 改动说明
+
+## 横屏不再绕过状态栏显示条件
+
+- 移除横屏过滤阶段对本模块 `forceShowIsland()` 的强制返回，以及窗口可见性阶段对 `mForceIslandVisible` 的临时强制写入。
+- 状态栏收起时，横屏应用中央不再自动出现消息胶囊或中央卡片；下滑状态栏后，沿用 SystemUI 原生逻辑恢复显示。
+- 不修改消息内容、卡片样式、点击/长按/滑动手势、通话岛、计时及应用选择逻辑。
+- 版本提升为 `versionCode = 34`、`versionName = "0.1.33"`，使用原模块相同签名，可覆盖安装。
+- 补齐 Git 源码中遗漏的通话通知标记与 `latestCall()` 状态读取，使 0.1.32 已发布的通话点击路由可以重新从源码完整编译。
+
+构建：`JAVA_HOME=<JDK21> ANDROID_HOME=<Android SDK> bash ./gradlew :app:assembleRelease`。当前仓库的旧 `MessagePresentationTest` 与 `MessageViews.adaptiveHalfWidth` 最新参数列表不一致，完整 `testDebugUnitTest` 仍会在旧测试源码编译阶段失败；本次未修改产品接口去迎合过期测试。
+
 # 0.1.32 改动说明
 
 本仓库为 [joelau0503/originos-notify-island](https://github.com/joelau0503/originos-notify-island) 的第三方修改分支，基于原作者 0.1.31 源码继续开发，版本号保持 `versionCode = 33`、`versionName = "0.1.32"`。

@@ -2,11 +2,13 @@
 
 适用于 vivo/iqoo OriginOS 的 LSPosed 消息上岛模块，将微信、QQ 等应用的通知接入 vivo 原生原子岛，提供消息预览、未读数量、详情卡片、快捷回复和下拉小窗等功能，同时保留通知栏中的原始通知。
 
-> **本仓库为第三方修改分支（0.1.32）**
-> 基于原作者 [joelau0503/originos-notify-island](https://github.com/joelau0503/originos-notify-island) 0.1.31 源码继续开发，全部改动见 [CHANGES.md](CHANGES.md)，可直接安装的构建产物在 [dist/OriginOS消息岛-0.1.32.apk](dist/OriginOS消息岛-0.1.32.apk)。
+> **本仓库为第三方修改分支（0.1.33）**
+> 基于原作者 [joelau0503/originos-notify-island](https://github.com/joelau0503/originos-notify-island) 0.1.31 源码继续开发，全部改动见 [CHANGES.md](CHANGES.md)，可直接安装的构建产物在 [dist/OriginOS-Notify-Island-0.1.33.apk](dist/OriginOS-Notify-Island-0.1.33.apk)。
 > 主要新增：多岛共存与挤压、单岛宽度自适应、卡片环境色渐变、第三方通话岛（微信/QQ 等，从接听开始计时）、设置页重排与即时生效。
 
-## 本分支改动（0.1.32）
+## 本分支改动（0.1.33）
+
+横屏恢复系统原生显示条件：状态栏未下滑时，不再强制把消息胶囊或中央卡片显示在横屏应用中央；下滑状态栏后，由 SystemUI 按原生逻辑恢复显示。其余消息、卡片、手势和通话岛功能保持不变。
 
 这一版在原版 0.1.31 的基础上继续往下做，目标是“岛更好用”——能同时装下更多东西、卡片更好看、通话也能上岛、改设置不用重启手机。
 
@@ -36,7 +38,7 @@
 
 **下载与安装**
 
-安装包在 [dist/OriginOS消息岛-0.1.32.apk](dist/OriginOS消息岛-0.1.32.apk)，也可以在 [Releases](https://github.com/6I0IM77/originos-notify-island/releases/latest) 里下载。版本号仍是 0.1.32，覆盖安装即可，LSPosed 作用域与激活方式和原版一致。
+安装包在 [dist/OriginOS-Notify-Island-0.1.33.apk](dist/OriginOS-Notify-Island-0.1.33.apk)，也可以在 [Releases](https://github.com/6I0IM77/originos-notify-island/releases/latest) 里下载。覆盖安装即可，LSPosed 作用域与激活方式和原版一致。
 
 ## 主要功能
 

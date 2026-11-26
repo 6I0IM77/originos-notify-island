@@ -5,17 +5,17 @@ import java.util.*;
 final class EntryStore<T> {
     static final class Entry<T> {
         final String key,pkg,conversation; final T payload; final long generation,receivedAt;
-        final String fingerprint; final int count;
-        Entry(String k,String p,String c,String f,int n,T v,long g,long at){key=k;pkg=p;conversation=c;fingerprint=f;count=n;payload=v;generation=g;receivedAt=at;}
+        final String fingerprint; final int count; final boolean call;
+        Entry(String k,String p,String c,String f,int n,T v,long g,long at,boolean isCall){key=k;pkg=p;conversation=c;fingerprint=f;count=n;payload=v;generation=g;receivedAt=at;call=isCall;}
     }
     private final LinkedHashMap<String,Entry<T>> entries=new LinkedHashMap<>();
     private long sequence; private String active;
-    Entry<T> post(String key,String pkg,String conversation,String fingerprint,int reported,T value,long now){
+    Entry<T> post(String key,String pkg,String conversation,String fingerprint,int reported,T value,long now,boolean call){
         Entry<T> old=entries.get(key);
         if(old!=null&&old.fingerprint.equals(fingerprint)&&old.count>=reported)return null;
         int count=Math.max(1,reported);
         if(old!=null)count=Math.max(count,old.count+(old.fingerprint.equals(fingerprint)?0:1));
-        Entry<T> next=new Entry<>(key,pkg,conversation,fingerprint,count,value,++sequence,now);
+        Entry<T> next=new Entry<>(key,pkg,conversation,fingerprint,count,value,++sequence,now,call);
         entries.put(key,next);active=key;
         while(entries.size()>128){String first=entries.keySet().iterator().next();entries.remove(first);}
         return next;
@@ -33,11 +33,17 @@ final class EntryStore<T> {
         for(Entry<T> e:entries.values())if(e.pkg.equals(pkg))last=e;
         return last;
     }
+    /** Newest call notification from one package, used by the call-pill click route. */
+    Entry<T> latestCall(String pkg){
+        Entry<T> last=null;
+        for(Entry<T> e:entries.values())if(e.pkg.equals(pkg)&&e.call)last=e;
+        return last;
+    }
     boolean select(String key){if(!entries.containsKey(key))return false;active=key;return true;}
     /** Metadata-only changes keep unread counts, expiry and swipe-dismissed state. */
     Entry<T> refresh(String key,T value){
         Entry<T> old=entries.get(key);if(old==null)return null;
-        Entry<T> next=new Entry<>(old.key,old.pkg,old.conversation,old.fingerprint,old.count,value,old.generation,old.receivedAt);
+        Entry<T> next=new Entry<>(old.key,old.pkg,old.conversation,old.fingerprint,old.count,value,old.generation,old.receivedAt,old.call);
         entries.put(key,next);return next;
     }
     Entry<T> get(String key){return entries.get(key);}

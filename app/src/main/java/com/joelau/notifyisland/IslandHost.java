@@ -21,7 +21,7 @@ final class IslandHost {
         try{nativeIsland=new NativeIsland(this,loader,context);nativeIsland.install();}
         catch(Throwable t){failed=true;module.error("Native island capability mismatch",t);}
         Wire.register(context,new BroadcastReceiver(){public void onReceive(Context c,Intent i){
-            Wire.pong(c,i,prefs,"island",failed?"当前系统接口不匹配，已安全停用":"原子岛显示服务已连接 · 0.1.32 · "+OriginProfile.current());
+            Wire.pong(c,i,prefs,"island",failed?"当前系统接口不匹配，已安全停用":"原子岛显示服务已连接 · 0.1.33 · "+OriginProfile.current());
         }},Wire.PING,null);
         if(failed)return;
         Wire.register(context,new BroadcastReceiver(){public void onReceive(Context c,Intent i){

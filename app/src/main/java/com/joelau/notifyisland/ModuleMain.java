@@ -15,7 +15,7 @@ public final class ModuleMain extends XposedModule {
         String packageName=p.getPackageName();
         if((!packageName.equals(Wire.SYSUI) && !packageName.equals(Wire.PLUGIN)) || !startedPackages.add(packageName))return;
         try {
-            info("Loading 0.1.32 in "+packageName+"; profile="+OriginProfile.current()+"; SDK="+android.os.Build.VERSION.SDK_INT+"; build="+android.os.Build.DISPLAY);
+            info("Loading 0.1.33 in "+packageName+"; profile="+OriginProfile.current()+"; SDK="+android.os.Build.VERSION.SDK_INT+"; build="+android.os.Build.DISPLAY);
             SharedPreferences prefs=getRemotePreferences(Wire.PREFS);
             if(packageName.equals(Wire.SYSUI)) {
                 SourceBridge source=new SourceBridge(this,prefs);
