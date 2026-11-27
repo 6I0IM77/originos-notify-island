@@ -161,6 +161,11 @@ final class SourceBridge {
         if(Notification.CATEGORY_CALL.equals(n.category))return true;
         Bundle x=n.extras;
         if(x==null)return false;
+        // QQ words its calls without the word 通话: "正在呼叫我…" when a peer rings you,
+        // "等待对方接听…" on the caller side. Those only count when the notification is shaped
+        // like a call (ongoing, full screen, or carrying answer/reject buttons), so an ordinary
+        // chat message that happens to contain 呼叫 stays a message.
+        boolean callShaped=(n.flags&Notification.FLAG_ONGOING_EVENT)!=0||n.fullScreenIntent!=null||callButtons(n);
         for(String k:new String[]{Notification.EXTRA_TITLE,Notification.EXTRA_CONVERSATION_TITLE,
                 Notification.EXTRA_TEXT,Notification.EXTRA_BIG_TEXT,Notification.EXTRA_SUB_TEXT,
                 Notification.EXTRA_INFO_TEXT}){
@@ -168,6 +173,19 @@ final class SourceBridge {
             if(value==null)continue;
             String text=value.toString();
             if(text.contains("通话")||text.contains("邀请")||text.contains("来电"))return true;
+            // These phrases only ever appear on a call notification, so they need no extra shape.
+            if(text.contains("正在呼叫我")||text.contains("呼叫你")||text.contains("等待对方接听")
+                    ||text.contains("正在等待对方"))return true;
+            if(callShaped&&text.contains("正在呼叫"))return true;
+        }
+        return false;
+    }
+    private boolean callButtons(Notification n){
+        if(n.actions==null)return false;
+        for(Notification.Action action:n.actions){
+            CharSequence title=action.title;
+            if(title!=null&&(title.toString().contains("接听")||title.toString().contains("拒绝")
+                    ||title.toString().contains("挂断")))return true;
         }
         return false;
     }
@@ -229,7 +247,7 @@ final class SourceBridge {
             .putExtra("conversation",conversation).putExtra("title",title).putExtra("body",body)
             .putExtra("label",label).putExtra("number",number).putExtra("fingerprint",fingerprint)
             .putExtra("postTime",s.getPostTime()).putExtra("click",n.contentIntent)
-            .putExtra("call",callLike(n)?1:0);
+            .putExtra("call",callLike(n)?1:0).putExtra("call_type",callType(x));
         // Voice-call notifications often keep the peer name in the sub text, info text or the
         // expanded lines while the title only repeats the application name.
         StringBuilder alt=new StringBuilder();
@@ -248,13 +266,27 @@ final class SourceBridge {
             out.putExtra("delivery",item.id);requestWake();
         });
     }
+    /**
+     * Android 12 call style stores the call phase in the notification extras: 1 for an
+     * unanswered incoming call, 2 for an ongoing one. Apps that use it let us tell a ring from
+     * a live call without guessing from text.
+     */
+    @SuppressWarnings("deprecation")
+    private static int callType(Bundle x){
+        if(x==null)return 0;
+        try{return x.getInt("android.callType",0);}catch(Throwable ignored){return 0;}
+    }
     private boolean mentionsCall(Notification n){
         if(n==null||n.extras==null)return false;
         Bundle x=n.extras;
         for(String k:new String[]{Notification.EXTRA_TITLE,Notification.EXTRA_TEXT,Notification.EXTRA_BIG_TEXT,
                 Notification.EXTRA_SUB_TEXT,Notification.EXTRA_INFO_TEXT,Notification.EXTRA_CONVERSATION_TITLE}){
             CharSequence value=x.getCharSequence(k);
-            if(value!=null&&(value.toString().contains("通话")||value.toString().contains("邀请")||value.toString().contains("来电")))return true;
+            if(value!=null){
+                String text=value.toString();
+                if(text.contains("通话")||text.contains("邀请")||text.contains("来电")
+                        ||text.contains("呼叫我")||text.contains("呼叫你")||text.contains("等待对方接听"))return true;
+            }
         }
         return false;
     }
@@ -285,7 +317,8 @@ final class SourceBridge {
         return null;
     }
     private static final String[] CALL_BOILER={"语音通话中","视频通话中","正在通话中","邀请你语音通话","邀请你视频通话",
-            "邀请你通话","向您发起通话","发起通话","的语音通话","的视频通话","语音通话","视频通话","通话中","通话","来电"};
+            "邀请你通话","向您发起通话","发起通话","的语音通话","的视频通话","语音通话","视频通话","通话中","通话","来电",
+            "正在呼叫我","正在呼叫你","等待对方接听","正在等待对方接听","正在等待","正在呼叫"};
     private void removed(String key){if(tracked.remove(key)&&context!=null)main.post(()->{pending.remove(key);context.sendBroadcast(new Intent(Wire.EVENT).setPackage(Wire.PLUGIN).putExtra("op","remove").putExtra("key",key));});}
     static String bounded(CharSequence s,int max){if(s==null)return "";String t=s.toString();return t.length()>max?t.substring(0,max):t;}
     // Drop the aggregated "（N条新消息）" / "(N条新消息)" suffix so the island keeps the contact name only.

@@ -30,8 +30,26 @@ final class IslandHost {
             calls.peer(pkg,i.getStringExtra("name"),i.getByteArrayExtra("avatar"));
         }},Wire.PEER_REPLY,null);
         Wire.register(context,new BroadcastReceiver(){public void onReceive(Context c,Intent i){
-            if(!"reload".equals(i.getStringExtra("op")))return;
-            try{module.info("Settings reload requested");nativeIsland.refreshCurrent(store.active()==null?0:store.unread(store.active().pkg));}
+            String op=i.getStringExtra("op");
+            if(!"reload".equals(op)&&!"apply".equals(op))return;
+            try{
+                String left=i.getStringExtra("left"),right=i.getStringExtra("right");
+                if(left!=null||right!=null){
+                    android.content.SharedPreferences.Editor editor=prefs.edit();
+                    if(left!=null)editor.putString(MessageDisplay.LEFT_PREF,left);
+                    if(right!=null)editor.putString(MessageDisplay.RIGHT_PREF,right);
+                    editor.apply();
+                }
+                module.info("Settings "+op+" requested");
+                EntryStore.Entry<Intent> current=store.active();
+                if(current==null){hide();return;}
+                if("apply".equals(op)){
+                    // 岛正显示时才重建；否则新样式随下一封通知自然生效，不主动弹岛。
+                    if(visibleKey==null)return;
+                    hide();
+                }
+                show(current);
+            }
             catch(Throwable t){module.error("Reload island",t);}
         }},Wire.RELOAD,null);
         Wire.register(context,new BroadcastReceiver(){public void onReceive(Context c,Intent i){

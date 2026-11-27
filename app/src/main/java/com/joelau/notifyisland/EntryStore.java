@@ -5,8 +5,10 @@ import java.util.*;
 final class EntryStore<T> {
     static final class Entry<T> {
         final String key,pkg,conversation; final T payload; final long generation,receivedAt;
-        final String fingerprint; final int count; final boolean call;
-        Entry(String k,String p,String c,String f,int n,T v,long g,long at,boolean isCall){key=k;pkg=p;conversation=c;fingerprint=f;count=n;payload=v;generation=g;receivedAt=at;call=isCall;}
+        final String fingerprint; final int count;
+        /** VoIP call notifications are kept for their peer name only: never shown, never counted. */
+        final boolean call;
+        Entry(String k,String p,String c,String f,int n,T v,long g,long at,boolean call){key=k;pkg=p;conversation=c;fingerprint=f;count=n;payload=v;generation=g;receivedAt=at;this.call=call;}
     }
     private final LinkedHashMap<String,Entry<T>> entries=new LinkedHashMap<>();
     private long sequence; private String active;
@@ -16,7 +18,9 @@ final class EntryStore<T> {
         int count=Math.max(1,reported);
         if(old!=null)count=Math.max(count,old.count+(old.fingerprint.equals(fingerprint)?0:1));
         Entry<T> next=new Entry<>(key,pkg,conversation,fingerprint,count,value,++sequence,now,call);
-        entries.put(key,next);active=key;
+        entries.put(key,next);
+        // A call notification must never become the message on screen or the badge source.
+        if(!call)active=key;
         while(entries.size()>128){String first=entries.keySet().iterator().next();entries.remove(first);}
         return next;
     }
@@ -27,16 +31,16 @@ final class EntryStore<T> {
         for(Entry<T> e:entries.values())if(e.pkg.equals(pkg))list.add(e);
         return list;
     }
+    /** Newest stored call notification of one package: its click opens the in-app call page. */
+    Entry<T> latestCall(String pkg){
+        Entry<T> last=null;
+        for(Entry<T> e:entries.values())if(e.pkg.equals(pkg)&&e.call)last=e;
+        return last;
+    }
     /** Newest stored entry from one package, used to name a third-party call island. */
     Entry<T> latestFor(String pkg){
         Entry<T> last=null;
         for(Entry<T> e:entries.values())if(e.pkg.equals(pkg))last=e;
-        return last;
-    }
-    /** Newest call notification from one package, used by the call-pill click route. */
-    Entry<T> latestCall(String pkg){
-        Entry<T> last=null;
-        for(Entry<T> e:entries.values())if(e.pkg.equals(pkg)&&e.call)last=e;
         return last;
     }
     boolean select(String key){if(!entries.containsKey(key))return false;active=key;return true;}
@@ -47,7 +51,7 @@ final class EntryStore<T> {
         entries.put(key,next);return next;
     }
     Entry<T> get(String key){return entries.get(key);}
-    int unread(String pkg){int n=0;for(Entry<T> e:entries.values())if(e.pkg.equals(pkg))n+=e.count;return n;}
+    int unread(String pkg){int n=0;for(Entry<T> e:entries.values())if(e.pkg.equals(pkg)&&!e.call)n+=e.count;return n;}
     boolean remove(String key){entries.remove(key);if(Objects.equals(active,key)){active=null;return true;}return false;}
     boolean expire(String key,long generation){Entry<T> e=entries.get(key);if(e==null||e.generation!=generation||!Objects.equals(active,key))return false;active=null;return true;}
     void hide(){active=null;}

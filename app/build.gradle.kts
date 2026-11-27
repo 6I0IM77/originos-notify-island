@@ -7,7 +7,7 @@ android {
         applicationId = "com.joelau.notifyisland"
         minSdk = 35
         targetSdk = 36
-        versionCode = 34
+        versionCode = 37
         versionName = "0.1.33"
     }
     buildTypes {

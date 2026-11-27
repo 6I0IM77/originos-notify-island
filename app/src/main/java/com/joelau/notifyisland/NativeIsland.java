@@ -656,8 +656,8 @@ final class NativeIsland {
                 host.prefs.getBoolean("show_count",true)?host.store.unread(e.pkg):null,host.prefs.getBoolean("wide",false),left);
     }
     private String sender(EntryStore.Entry<Intent> e){String s=e.payload.getStringExtra("title");return s==null||s.isEmpty()?e.payload.getStringExtra("label"):s;}
-    private MessageDisplay displayMode(){return MessageDisplay.parse(host.prefs.getString(MessageDisplay.PREF,MessageDisplay.CONTENT.name()));}
-    private boolean usesPortrait(){return displayMode().usesAvatar(host.prefs.getBoolean(MessageDisplay.SENDER_AVATAR,false),host.prefs.getBoolean(MessageDisplay.APP_AVATAR,false));}
+    private MessageDisplay displayMode(){return MessageDisplay.read(host.prefs);}
+    private boolean usesPortrait(){return displayMode().avatarLeft;}
     private String rightText(EntryStore.Entry<Intent> e){return displayMode().rightText(e.payload.getStringExtra("body"),sender(e),e.payload.getStringExtra("label"));}
     private android.graphics.Bitmap avatar(EntryStore.Entry<Intent> e){return SenderAvatar.decode(e.payload.getByteArrayExtra(SenderAvatar.EXTRA));}
     /** Monotonic node token: every re-render looks like fresh content to the native controller. */
@@ -701,7 +701,9 @@ final class NativeIsland {
         android.graphics.drawable.Icon icon=portrait==null?appIcon(e.pkg):Icon.createWithBitmap(portrait);
         call(b,"buildLeftIcon",Icon.class,icon);
         String title=p.getStringExtra("title");if(title==null||title.isEmpty())title=p.getStringExtra("label");
-        call(b,"buildLeftContent",CharSequence.class,title);
+        MessageDisplay style=displayMode();
+        // 右侧显示消息内容时，联系人名字放在左侧；右侧显示名字时左侧只留图标。
+        call(b,"buildLeftContent",CharSequence.class,style.iconOnlyLeft()?"":title);
         call(b,"buildRightContent",CharSequence.class,rightText(e));
         call(b,"buildIslandClick",int.class,0);
         call(b,"buildClickIslandResp",PendingIntent.class,p.getParcelableExtra("click"));

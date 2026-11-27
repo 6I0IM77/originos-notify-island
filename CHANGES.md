@@ -1,14 +1,23 @@
 # 0.1.33 改动说明
 
-## 横屏不再绕过状态栏显示条件
+## 横屏跟随状态栏，不再常驻应用中央
 
-- 移除横屏过滤阶段对本模块 `forceShowIsland()` 的强制返回，以及窗口可见性阶段对 `mForceIslandVisible` 的临时强制写入。
-- 状态栏收起时，横屏应用中央不再自动出现消息胶囊或中央卡片；下滑状态栏后，沿用 SystemUI 原生逻辑恢复显示。
-- 不修改消息内容、卡片样式、点击/长按/滑动手势、通话岛、计时及应用选择逻辑。
-- 版本提升为 `versionCode = 34`、`versionName = "0.1.33"`，使用原模块相同签名，可覆盖安装。
-- 补齐 Git 源码中遗漏的通话通知标记与 `latestCall()` 状态读取，使 0.1.32 已发布的通话点击路由可以重新从源码完整编译。
+原生两道显示门控：数据层 `AtomIslandsDataController.handleAtomIslandReceiversData`（bean 进入待显示列表需 `mStatusBarShowing || forceShowIsland() || ...`），窗口层 `IslandWindowControllerImpl.applyVisible`（窗口显示需 `(mForceIslandVisible || mStatusBarVisible || mPortrait) && 数据存在 && 非 AOD`）。本版把自有岛屿也按这两道门控处理：
 
-构建：`JAVA_HOME=<JDK21> ANDROID_HOME=<Android SDK> bash ./gradlew :app:assembleRelease`。当前仓库的旧 `MessagePresentationTest` 与 `MessageViews.adaptiveHalfWidth` 最新参数列表不一致，完整 `testDebugUnitTest` 仍会在旧测试源码编译阶段失败；本次未修改产品接口去迎合过期测试。
+- **数据层**：hook 过滤与 bean `forceShowIsland()` getter；横屏时只有原生状态栏已出现（优先读 `isStatusBarShowing()`，该接口缺失的配置回退通知面板 / QS 展开标志）才放行自有 bean；栏收起时不再强制把消息胶囊或中央卡片塞进待显示列表。
+- **窗口层**：hook `applyVisible`；栏出现才在本次调用内临时抬高 `mForceIslandVisible`，调用结束恢复原值；栏收起时清掉残留 force，避免自有岛压在横屏应用上。原生的数据存在、AOD 判断、动画与窗口 / 输入清理仍然执行，force 标志不跨岛泄漏。
+- 两层 hook 均包 try/catch：插件签名或字段不匹配时回退原生调用，模块安全停用而不是崩溃；OS5 缺失的 `mStatusBarVisible` 字段按可选反射处理。
+- 消息内容、卡片样式、点击 / 长按 / 滑动手势、通话岛、计时与应用选择逻辑均未改动。
+
+## 补齐仓库源码中缺失、0.1.32 已发布包内包含的改动
+
+- **显示样式拆成左右两个独立选项**：左侧 = 联系人头像 / 应用图标，右侧 = 联系人名字 / 消息详细内容；右侧选“消息内容”时，联系人名字自动回到左侧，左侧同时显示头像或图标。设置改完随 RELOAD 广播原地重绘当前岛，无需重启。
+- **通话通知识别补强**：QQ 等不带“通话”字样的呼叫文案（正在呼叫我 / 呼叫你 / 等待对方接听 / 正在等待对方等）按通话形态判定（ongoing 事件、全屏意图、或带接听 / 拒绝 / 挂断按钮）；读取 Android 12 通话通知 `callType` 区分来电与接通；通话通知只保留对方名字供点击路由，不计未读、不占主岛。
+- 支持赞赏 / 咖啡两张二维码分别保存到相册。
+
+版本 `versionCode = 37`、`versionName = "0.1.33"`，沿用原模块相同签名，可覆盖安装。
+
+构建：`JAVA_HOME=<JDK21> ANDROID_HOME=<Android SDK> bash ./gradlew :app:assembleRelease`，再 `zipalign -p -f 4` 后用 V3 签名。横屏门控契约由 `tests/LandscapeContractCheck` 覆盖（OS5/6/7 栏显 / 栏隐放行、嵌套与异常清理、原生 force 保留）。
 
 # 0.1.32 改动说明
 

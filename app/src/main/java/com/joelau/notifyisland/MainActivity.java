@@ -20,12 +20,10 @@ public final class MainActivity extends Activity implements App.Listener {
     private TextView status,sourceStatus,islandStatus,selectedLabel,timeLabel,enabledTitle;
     private View moduleDot,sourceDot,islandDot;
     private SeekBar time;
-    private final MessageDisplay[] modes={MessageDisplay.CONTENT,MessageDisplay.AVATAR,MessageDisplay.SENDER_ONLY,MessageDisplay.APP_ONLY};
-    private TextView[] modeChips;
+    private TextView[] leftOptions,rightOptions;
+    private int leftIndex,rightIndex;
     private SeekBar delay;
     private TextView delayLabel;
-    private LinearLayout senderAvatarOptions,appAvatarOptions;
-    private boolean updatingDisplay;
     private XposedService service;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
@@ -57,9 +55,8 @@ public final class MainActivity extends Activity implements App.Listener {
             if(!remote.contains("initialized")){
                 remote.edit().putBoolean("enabled",prefs.getBoolean("enabled",true)).putBoolean("show_count",prefs.getBoolean("show_count",true))
                     .putBoolean("wide",prefs.getBoolean("wide",false)).putBoolean("permanent",prefs.getBoolean("permanent",false))
-                    .putBoolean(MessageDisplay.SENDER_AVATAR,prefs.getBoolean(MessageDisplay.SENDER_AVATAR,false))
-                    .putBoolean(MessageDisplay.APP_AVATAR,prefs.getBoolean(MessageDisplay.APP_AVATAR,false))
-                    .putString(MessageDisplay.PREF,prefs.getString(MessageDisplay.PREF,MessageDisplay.CONTENT.name()))
+                    .putString(MessageDisplay.LEFT_PREF,displayMode().avatarLeft?MessageDisplay.LEFT_AVATAR:MessageDisplay.LEFT_ICON)
+                    .putString(MessageDisplay.RIGHT_PREF,displayMode().contentRight?MessageDisplay.RIGHT_CONTENT:MessageDisplay.RIGHT_NAME)
                     .putBoolean("call_island",prefs.getBoolean("call_island",true))
                     .putBoolean("call_contact_avatar",prefs.getBoolean("call_contact_avatar",true))
                     .putBoolean("call_island_all",prefs.getBoolean("call_island_all",true))
@@ -105,22 +102,15 @@ public final class MainActivity extends Activity implements App.Listener {
         LinearLayout appLines=(LinearLayout)apps.getChildAt(1);selectedLabel=text("",12,secondary,false);selectedLabel.setPadding(0,dp(5),0,0);appLines.addView(selectedLabel);updateSelected();
         apps.addView(glyphView("chevron",secondary,18));apps.setBackground(ripple(Color.TRANSPARENT,22));apps.setOnClickListener(v->selectApps());divider(display,64);
 
-        LinearLayout modeBlock=column();modeBlock.setPadding(dp(18),dp(16),dp(18),dp(14));display.addView(modeBlock);
-        LinearLayout modeHead=column();modeHead.addView(text("显示样式",15,foreground,true));
-        TextView modeNote=text("四种样式互斥，同一时刻只生效一种",12,secondary,false);modeNote.setPadding(0,dp(5),0,0);modeHead.addView(modeNote);modeBlock.addView(modeHead);
-        LinearLayout chips=row();chips.setPadding(0,dp(12),0,0);modeChips=new TextView[modes.length];
-        for(int i=0;i<modes.length;i++){
-            TextView chip=text(modes[i].label(),13,secondary,true);chip.setGravity(Gravity.CENTER);chip.setPadding(dp(2),dp(10),dp(2),dp(10));chip.setMinHeight(dp(40));
-            chip.setBackground(ripple(Color.TRANSPARENT,14));chip.setContentDescription("显示样式："+modes[i].label());
-            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);if(i>0)lp.leftMargin=dp(8);chips.addView(chip,lp);modeChips[i]=chip;
-            final MessageDisplay target=modes[i];chip.setOnClickListener(v->setDisplayMode(target));
-        }
-        modeBlock.addView(chips);
-        senderAvatarOptions=column();senderAvatarOptions.setPadding(dp(30),0,0,0);display.addView(senderAvatarOptions);
-        addSwitch(senderAvatarOptions,"avatar",MessageDisplay.SENDER_AVATAR,"发送人头像","左侧显示发送人头像，无头像时退回应用图标；右侧仍是发送人名称和未读数量",false);
-        appAvatarOptions=column();appAvatarOptions.setPadding(dp(30),0,0,0);display.addView(appAvatarOptions);
-        addSwitch(appAvatarOptions,"avatar",MessageDisplay.APP_AVATAR,"应用图标换成头像","左半的发送人头像优先于应用图标；右侧仍是应用名称和未读数量",false);
-        setDisplayMode(displayMode());
+        MessageDisplay style=displayMode();
+        leftIndex=style.avatarLeft?0:1;rightIndex=style.contentRight?1:0;
+        leftOptions=displayOption(display,"avatar","左侧显示","优先显示联系人头像，取不到时退回应用图标",
+                new String[]{"联系人头像","应用图标"},leftIndex,
+                i->{leftIndex=i;applyDisplay(i==0?MessageDisplay.LEFT_AVATAR:MessageDisplay.LEFT_ICON,rightIndex==0?MessageDisplay.RIGHT_NAME:MessageDisplay.RIGHT_CONTENT);});
+        divider(display,64);
+        rightOptions=displayOption(display,"sender","右侧显示","选消息内容时，联系人名字自动放到左侧",
+                new String[]{"联系人名字","消息内容"},rightIndex,
+                i->{rightIndex=i;applyDisplay(leftIndex==0?MessageDisplay.LEFT_AVATAR:MessageDisplay.LEFT_ICON,i==0?MessageDisplay.RIGHT_NAME:MessageDisplay.RIGHT_CONTENT);});
         divider(display,64);
         addSwitch(display,"count","show_count","未读数量","在消息岛右侧显示消息数量",true);divider(display,64);
         addSwitch(display,"wide","wide","扩展显示","使用固定的扩展胶囊尺寸，关闭后按内容自动适应；超出可用宽度的文字滚动显示",false);
@@ -155,32 +145,33 @@ public final class MainActivity extends Activity implements App.Listener {
         LinearLayout notes=column();
         notes.addView(text("仅在本机处理通知",12,secondary,true));
         TextView setup=text("首次启用\n在LSPosed勾选系统界面与系统界面组件，重启手机。",11,secondary,false);setup.setLineSpacing(dp(4),1);setup.setPadding(0,dp(10),0,0);notes.addView(setup);
-        TextView details=text("查看消息详情\n长按消息岛，展开消息详情卡片；下拉卡片，以小窗打开应用。",11,secondary,false);details.setLineSpacing(dp(4),1);details.setPadding(0,dp(10),0,0);notes.addView(details);
+        TextView details=text("查看消息详情\n点击消息岛展开卡片详情，长按消息岛默认小窗打开；卡片详情直接下拉也可以小窗打开。",11,secondary,false);details.setLineSpacing(dp(4),1);details.setPadding(0,dp(10),0,0);notes.addView(details);
+        TextView callNote=text("通话上岛\n点一下通话岛，直接回到应用内的接听 / 挂断页面，缩成小窗或切到后台时同样有效。",11,secondary,false);callNote.setLineSpacing(dp(4),1);callNote.setPadding(0,dp(10),0,0);notes.addView(callNote);
         LinearLayout.LayoutParams noteParams=new LinearLayout.LayoutParams(0,-2,1);noteParams.leftMargin=dp(9);privacy.addView(notes,noteParams);content.addView(privacy);
         Button support=new Button(this);support.setText("支持我一下，请我喝杯咖啡吧~");support.setTextSize(14);support.setTextColor(accent);support.setTypeface(null,Typeface.BOLD);support.setAllCaps(false);support.setStateListAnimator(null);support.setGravity(Gravity.CENTER);support.setMinHeight(dp(58));support.setPadding(dp(14),dp(12),dp(14),dp(12));support.setBackground(ripple(tint,20));
         support.setCompoundDrawablesRelativeWithIntrinsicBounds(new UiGlyph("coffee",accent,dp(22)),null,null,null);support.setCompoundDrawablePadding(dp(8));support.setOnClickListener(v->showCoffee());content.addView(support,new LinearLayout.LayoutParams(-1,-2));updateStatus();
     }
     /** Preferences are stored in the module process; ask it to repaint the current pill. */
     private void reload(){
-        try{sendBroadcast(new Intent(Wire.RELOAD).setPackage(Wire.SYSUI).putExtra("op","reload"));}catch(Throwable ignored){}
+        try{
+            // 带上左右显示选项的当前值：模块进程里的 RemotePreferences 可能还是旧缓存，
+            // 由它在收到广播后写回并重绘当前岛，设置才会立刻生效。
+            MessageDisplay style=displayMode();
+            sendBroadcast(new Intent(Wire.RELOAD).setPackage(Wire.SYSUI).putExtra("op","reload")
+                .putExtra("left",style.avatarLeft?MessageDisplay.LEFT_AVATAR:MessageDisplay.LEFT_ICON)
+                .putExtra("right",style.contentRight?MessageDisplay.RIGHT_CONTENT:MessageDisplay.RIGHT_NAME));
+        }catch(Throwable ignored){}
+    }
+    /** 显示样式改动：带上新值并让模块重建当前岛，立即可见。 */
+    private void applyDisplay(String left,String right){
+        try{
+            prefs.edit().putString(MessageDisplay.LEFT_PREF,left).putString(MessageDisplay.RIGHT_PREF,right).apply();
+            sendBroadcast(new Intent(Wire.RELOAD).setPackage(Wire.SYSUI).putExtra("op","apply")
+                    .putExtra("left",left).putExtra("right",right));
+        }catch(Throwable ignored){}
     }
     private void updateTimer(){if(time!=null){boolean enabled=!prefs.getBoolean("permanent",false);time.setEnabled(enabled);timer.setAlpha(enabled?1:.42f);}}
-    private MessageDisplay displayMode(){return MessageDisplay.parse(prefs.getString(MessageDisplay.PREF,MessageDisplay.CONTENT.name()));}
-    private void setDisplayMode(MessageDisplay mode){
-        if(updatingDisplay)return;
-        if(!mode.name().equals(prefs.getString(MessageDisplay.PREF,MessageDisplay.CONTENT.name())))
-            prefs.edit().putString(MessageDisplay.PREF,mode.name()).apply();
-        updatingDisplay=true;
-        try{
-            if(modeChips!=null)for(int i=0;i<modeChips.length;i++){
-                boolean on=modes[i]==mode;TextView chip=modeChips[i];
-                chip.setTextColor(on?accent:secondary);
-                chip.setBackground(on?shape(tint,14,accent):shape(background,14,border));
-            }
-            if(appAvatarOptions!=null)appAvatarOptions.setVisibility(mode==MessageDisplay.APP_ONLY?View.VISIBLE:View.GONE);
-            if(senderAvatarOptions!=null)senderAvatarOptions.setVisibility(mode==MessageDisplay.SENDER_ONLY?View.VISIBLE:View.GONE);
-        }finally{updatingDisplay=false;}
-    }
+    private MessageDisplay displayMode(){return MessageDisplay.read(prefs);}
     private void updateStatus(){
         if(status==null)return;status.setText(service==null?"LSP 未连接":"LSP 已连接");sourceStatus.setText(source);islandStatus.setText(island);
         moduleDot.setBackground(shape(service==null?secondary:0xff46ad88,5,0));sourceDot.setBackground(shape(source.contains("已连接")?0xff46ad88:secondary,5,0));islandDot.setBackground(shape(island.contains("已连接")?0xff46ad88:secondary,5,0));
@@ -202,6 +193,38 @@ public final class MainActivity extends Activity implements App.Listener {
         LinearLayout row=row();row.setPadding(dp(18),dp(13),dp(18),dp(13));row.addView(dot,new LinearLayout.LayoutParams(dp(7),dp(7)));TextView title=text(label,12,secondary,false);title.setPadding(dp(10),0,dp(14),0);row.addView(title);
         TextView value=text("",12,foreground,false);value.setGravity(Gravity.END);row.addView(value,new LinearLayout.LayoutParams(0,-2,1));parent.addView(row);return value;
     }
+    /** 与其它设置行同一套图标+标题样式，下面是两选一的分段控件。 */
+    private TextView[] displayOption(LinearLayout parent,String glyph,String title,String detail,String[] labels,int selected,java.util.function.IntConsumer pick){
+        LinearLayout block=column();block.setPadding(dp(18),dp(17),dp(16),dp(16));parent.addView(block,new LinearLayout.LayoutParams(-1,-2));
+        LinearLayout head=row();
+        FrameLayout icon=new FrameLayout(this);icon.setBackground(shape(tint,12,0));
+        icon.addView(glyphView(glyph,accent,21),new FrameLayout.LayoutParams(dp(21),dp(21),Gravity.CENTER));
+        head.addView(icon,new LinearLayout.LayoutParams(dp(34),dp(34)));
+        LinearLayout lines=column();lines.setPadding(dp(12),0,dp(12),0);head.addView(lines,new LinearLayout.LayoutParams(0,-2,1));
+        lines.addView(text(title,15,foreground,true));
+        TextView note=text(detail,12,secondary,false);note.setPadding(0,dp(5),0,0);lines.addView(note);
+        block.addView(head);
+        LinearLayout chips=row();LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.topMargin=dp(12);block.addView(chips,cp);
+        TextView[] cells=new TextView[labels.length];
+        for(int i=0;i<labels.length;i++){
+            TextView chip=text(labels[i],13,secondary,true);chip.setGravity(Gravity.CENTER);chip.setPadding(dp(2),dp(10),dp(2),dp(10));chip.setMinHeight(dp(40));
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);if(i>0)lp.leftMargin=dp(8);chips.addView(chip,lp);cells[i]=chip;
+            final int index=i;
+            chip.setOnClickListener(v->{pick.accept(index);paintOptions(cells,index);});
+        }
+        paintOptions(cells,selected);
+        return cells;
+    }
+
+    private void paintOptions(TextView[] cells,int selected){
+        if(cells==null)return;
+        for(int i=0;i<cells.length;i++){
+            boolean on=i==selected;
+            cells[i].setTextColor(on?accent:secondary);
+            cells[i].setBackground(on?shape(tint,14,accent):shape(background,14,border));
+        }
+    }
+
     private LinearLayout settingRow(LinearLayout parent,String glyph,String title,String detail){
         LinearLayout row=row();row.setPadding(dp(18),dp(17),dp(16),dp(17));row.setMinimumHeight(dp(78));FrameLayout icon=new FrameLayout(this);icon.setBackground(shape(tint,12,0));icon.addView(glyphView(glyph,accent,21),new FrameLayout.LayoutParams(dp(21),dp(21),Gravity.CENTER));row.addView(icon,new LinearLayout.LayoutParams(dp(34),dp(34)));
         LinearLayout lines=column();lines.setPadding(dp(12),0,dp(12),0);row.addView(lines,new LinearLayout.LayoutParams(0,-2,1));lines.addView(text(title,15,foreground,true));
@@ -276,18 +299,28 @@ public final class MainActivity extends Activity implements App.Listener {
     }
     private Button selectionButton(String title){Button b=new Button(this);b.setText(title);b.setTextSize(12);b.setTextColor(new ColorStateList(new int[][]{new int[]{android.R.attr.state_enabled},new int[]{}},new int[]{accent,secondary}));b.setAllCaps(false);b.setMinWidth(dp(56));b.setMinimumWidth(dp(56));b.setMinHeight(dp(48));b.setPadding(dp(10),0,dp(10),0);b.setBackground(ripple(Color.TRANSPARENT,12));b.setStateListAnimator(null);return b;}
     private void showCoffee(){
-        LinearLayout box=column();box.setPadding(dp(24),dp(8),dp(24),dp(4));TextView message=text("谢谢你，让通知上岛继续变好。",13,secondary,false);message.setGravity(Gravity.CENTER);message.setPadding(0,0,0,dp(18));box.addView(message);
-        ImageView qr=new ImageView(this);qr.setImageResource(R.drawable.coffee_qr);qr.setAdjustViewBounds(true);qr.setScaleType(ImageView.ScaleType.FIT_CENTER);qr.setContentDescription("支持开发者的收款二维码，长按保存到相册");
-        qr.setOnLongClickListener(v->{saveCoffeeQr();return true;});box.addView(qr,new LinearLayout.LayoutParams(-1,-2));
-        TextView hint=text("长按二维码，保存到相册",12,secondary,false);hint.setGravity(Gravity.CENTER);hint.setPadding(0,dp(14),0,0);box.addView(hint);
-        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("感谢你的支持").setView(box).setPositiveButton("关闭",null).create();dialog.show();styleDialog(dialog);
+        LinearLayout box=column();box.setPadding(dp(24),dp(8),dp(24),dp(4));
+        TextView message=text("这个模块免费、开源，代码全部在 GitHub 上。如果它帮到了你，可以随意打赏，金额不限，不打赏也不影响任何功能。",12,secondary,false);message.setGravity(Gravity.CENTER);message.setPadding(0,0,0,dp(4));box.addView(message);
+        box.addView(coffeeBlock("原作者","joelau（原项目作者）","原作者的收款码，长按保存到相册",R.drawable.coffee_qr,R.raw.coffee_qr_original,"通知上岛-原作者二维码"));
+        box.addView(coffeeBlock("现作者","6I0IM77（当前维护者）","现作者的收款码，长按保存到相册",R.drawable.donate_qr,R.raw.donate_qr_original,"通知上岛-现作者二维码"));
+        TextView hint=text("长按对应二维码，即可保存到相册",12,secondary,false);hint.setGravity(Gravity.CENTER);hint.setPadding(0,dp(10),0,dp(2));box.addView(hint);
+        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);scroll.addView(box);
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("感谢你的支持").setView(scroll).setPositiveButton("关闭",null).create();dialog.show();styleDialog(dialog);
     }
-    private void saveCoffeeQr(){
+    private LinearLayout coffeeBlock(String role,String who,String label,int drawable,int raw,String album){
+        LinearLayout block=column();block.setPadding(0,dp(16),0,0);
+        LinearLayout caption=row();caption.setGravity(Gravity.CENTER);
+        TextView roleView=text(role,12,accent,true);caption.addView(roleView);TextView whoView=text(" · "+who,12,secondary,false);caption.addView(whoView);block.addView(caption);
+        ImageView qr=new ImageView(this);qr.setImageResource(drawable);qr.setAdjustViewBounds(true);qr.setMaxHeight(dp(240));qr.setScaleType(ImageView.ScaleType.FIT_CENTER);qr.setContentDescription(label);
+        qr.setPadding(0,dp(8),0,0);qr.setOnLongClickListener(v->{saveCoffeeQr(raw,album);return true;});block.addView(qr,new LinearLayout.LayoutParams(-1,-2));
+        return block;
+    }
+    private void saveCoffeeQr(int rawRes,String album){
         if(savingCoffee)return;savingCoffee=true;
         Context application=getApplicationContext();
         worker.execute(()->{
             String result;
-            try{CoffeeQrSaver.save(application);result="二维码已保存到相册 · Pictures/通知上岛";}
+            try{CoffeeQrSaver.save(application,rawRes,album);result="二维码已保存到相册 · Pictures/通知上岛";}
             catch(Exception ex){result="保存失败，请检查手机剩余空间后重试";}
             final String message=result;
             runOnUiThread(()->{savingCoffee=false;Toast.makeText(application,message,Toast.LENGTH_LONG).show();});
