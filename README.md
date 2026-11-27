@@ -40,7 +40,7 @@
 
 **下载与安装**
 
-安装包在 [dist/OriginOS-Notify-Island-0.1.33.apk](dist/OriginOS-Notify-Island-0.1.33.apk)，也可以在 [Releases](https://github.com/6I0IM77/originos-notify-island/releases/latest) 里下载。覆盖安装即可，LSPosed 作用域与激活方式和原版一致。
+在 [Releases](https://github.com/6I0IM77/originos-notify-island/releases/latest) 里下载。覆盖安装即可，LSPosed 作用域与激活方式和原版一致。
 
 ## 主要功能
 
